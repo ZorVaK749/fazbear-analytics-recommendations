@@ -1,5 +1,8 @@
 # Diseño propuesto — ms-analytics-recommendations
 
+> Histórico de diseño. Implementación integral disponible en src/main y contrato
+> actual en README raíz. API admin y otros contratos no descritos allí siguen pendientes.
+
 ## Responsabilidad y tecnología
 
 Proyectar comportamiento, afinidades y recomendaciones de catálogo real. No pagos,

@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: ms-analytics-recommendations
+  datasource:
+    url: ${ANALYTICS_DB_URL:jdbc:postgresql://localhost:55435/analytics}
+    username: ${ANALYTICS_DB_USER:analytics}
+    password: ${ANALYTICS_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 16
+      connection-timeout: 5000
+  flyway:
+    clean-disabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ms-analytics-recommendations-v1
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        max.poll.records: 50
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        delivery.timeout.ms: 10000
+        request.timeout.ms: 5000
+    listener:
+      ack-mode: record
+      log-container-config: false
+  mvc:
+    log-request-details: false
+server:
+  port: 8080
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+analytics:
+  security:
+    tenant: ${AZURE_TENANT_ID:ee0d2c5b-e60b-4c57-9b30-8a38a520c430}
+    audience: ${AZURE_API_AUDIENCE:304fa289-2b72-447b-9c48-f00998f7c22f}
+logging:
+  level:
+    org.springframework.jdbc: WARN
+    org.springframework.security: WARN
+    org.springframework.kafka.listener: OFF
+    org.apache.kafka.clients: WARN
