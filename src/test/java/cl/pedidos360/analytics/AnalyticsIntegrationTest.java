@@ -105,6 +105,38 @@ class AnalyticsIntegrationTest {
 
     @AfterAll static void stopJwks() { JWKS.stop(0); }
 
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named="EV3_PRODUCER_CONTRACTS", matches="true")
+    void actualProducerPayloadsReachKafkaProjectionAndRecommendationsWithoutTranslation() throws Exception {
+        var products = JSON.readTree(java.nio.file.Files.readString(java.nio.file.Path.of(System.getenv("PRODUCTOS_CONTRACT_FILE"))));
+        var cart = JSON.readTree(java.nio.file.Files.readString(java.nio.file.Path.of(System.getenv("CARRITO_CONTRACT_FILE"))));
+        assertThat(products.size()).isEqualTo(2);
+        assertThat(cart.size()).isEqualTo(3);
+        var all = new java.util.ArrayList<com.fasterxml.jackson.databind.JsonNode>();
+        products.forEach(all::add); cart.forEach(all::add);
+        for (var event : all) {
+            // Exact bytes/fields emitted by the producers: no translation or invented envelopes.
+            for (int copy=0; copy<2; copy++) send(event.path("eventType").asText(), event.path("aggregateId").asText(), event.toString());
+        }
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(count("event_inbox")).isEqualTo(5);
+            assertThat(count("interaction")).isEqualTo(4);
+            assertThat(count("product_projection")).isEqualTo(1);
+        });
+        var selection=products.get(1).path("data");
+        var tenant=UUID.fromString(selection.path("tenantId").asText());
+        var owner=UUID.fromString(selection.path("ownerId").asText());
+        var result=recommendations.recommend(tenant, owner, 6);
+        assertThat(result.estrategia()).isEqualTo("PERSONALIZED");
+        assertThat(result.items()).extracting(RecommendationService.Item::productoId)
+            .contains(selection.path("productoId").asLong());
+        var cartData=cart.get(0).path("data");
+        var summary=recommendations.summary(UUID.fromString(cartData.path("tenantId").asText()), UUID.fromString(cartData.path("ownerId").asText()));
+        for (String action : List.of("ADD", "UPDATE", "REMOVE"))
+            assertThat(((Map<?,?>) summary.get("porTipo")).get(action)).isEqualTo(1L);
+        assertThat(count("event_quarantine")).isZero();
+    }
+
     @Test void dynamicRecommendationsFallbacksEligibilityAndTenantIsolation() throws Exception {
         product(1, "Pizza", "food", 5, true, 1);
         product(2, "Drink", "drinks", 5, true, 1);

@@ -1,5 +1,10 @@
 # ms-analytics-recommendations — PEDIDOS360 EV3
 
+AWS: `Dockerfile.aws`/perfil `ev3-aws` exige PostgreSQL y rechaza JWKS LAB/perfiles
+mezclados. Workflow GHCR manual, publicación opt-in; procedimiento y auditoría13/11
+en repo `fazbear-pago/docs/AWS_DEPLOY_ROLLBACK.md`. Contrato cruzado real de productores
+ejecutable desde `fazbear-pago/deploy/contracts/verify-producers.ps1`.
+
 Aplicación ejecutable Java 21 / Spring Boot 3.5.16, PostgreSQL/Flyway y consumidores
 Kafka. Rama `ev3/integracion-integral`. Sin despliegue AWS ni imágenes publicadas.
 

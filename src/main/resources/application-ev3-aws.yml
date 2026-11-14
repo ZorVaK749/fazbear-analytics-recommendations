@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: ${ANALYTICS_DB_URL}
+    username: ${ANALYTICS_DB_USER}
+    password: ${ANALYTICS_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
