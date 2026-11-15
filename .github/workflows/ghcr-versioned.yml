@@ -11,6 +11,7 @@ permissions:
   packages: write
 jobs:
   image:
-    uses: ZorVaK749/fazbear-pago/.github/workflows/ghcr-build.yml@3f42f4d284bf2cc284cadc2a1b378ce48df934e7
+    uses: ZorVaK749/fazbear-pago/.github/workflows/ghcr-build.yml@ev3/integracion-integral
     with:
       publish: ${{ inputs.publish }}
+
