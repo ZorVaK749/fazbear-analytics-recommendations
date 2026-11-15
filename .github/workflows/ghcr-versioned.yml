@@ -1,0 +1,17 @@
+name: Prepare or publish versioned AWS image (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to GHCR (never deploys to AWS)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  packages: write
+jobs:
+  image:
+    uses: ZorVaK749/fazbear-pago/.github/workflows/ghcr-build.yml@ev3/integracion-integral
+    with:
+      publish: ${{ inputs.publish }}
+
