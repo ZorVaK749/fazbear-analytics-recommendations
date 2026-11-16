@@ -13,6 +13,10 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.*;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -54,9 +58,14 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain security(HttpSecurity http) throws Exception {
-        return http.csrf(c -> c.disable())
+        return http
+                .cors(org.springframework.security.config.Customizer.withDefaults())
+                .csrf(c -> c.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(a -> a.requestMatchers(HttpMethod.GET, "/health").permitAll()
+                .authorizeHttpRequests(a -> a
+                        .requestMatchers(HttpMethod.OPTIONS, "/api/recomendaciones/**", "/api/recomendaciones",
+                                "/api/analytics/**", "/api/analytics").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/recomendaciones/me", "/api/analytics/me/resumen")
                         .hasAuthority("SCOPE_access_as_user").anyRequest().denyAll())
                 .oauth2ResourceServer(o -> o.jwt(j -> {}).authenticationEntryPoint((req, res, ex) -> {
@@ -70,5 +79,23 @@ public class SecurityConfig {
                     res.setContentType("application/json");
                     res.getWriter().write("{\"code\":\"FORBIDDEN\"}");
                 })).build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration cors = new CorsConfiguration();
+        cors.setAllowedOrigins(List.of(
+            "https://p5gsy16utd.execute-api.us-east-1.amazonaws.com",
+            "http://localhost:4200"));
+        cors.setAllowedMethods(List.of("GET", "OPTIONS"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"));
+        cors.setAllowCredentials(false);
+        cors.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/recomendaciones/**", cors);
+        source.registerCorsConfiguration("/api/recomendaciones", cors);
+        source.registerCorsConfiguration("/api/analytics/**", cors);
+        source.registerCorsConfiguration("/api/analytics", cors);
+        return source;
     }
 }
