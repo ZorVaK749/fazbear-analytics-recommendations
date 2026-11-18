@@ -1,5 +1,8 @@
-name: Prepare or publish versioned AWS image (manual)
+name: Prepare or publish versioned AWS image
 on:
+  push:
+    branches:
+      - ev3/integracion-integral
   workflow_dispatch:
     inputs:
       publish:
@@ -13,5 +16,5 @@ jobs:
   image:
     uses: ZorVaK749/fazbear-pago/.github/workflows/ghcr-build.yml@ev3/integracion-integral
     with:
-      publish: ${{ inputs.publish }}
+      publish: ${{ github.event_name == 'push' || inputs.publish == true }}
 
