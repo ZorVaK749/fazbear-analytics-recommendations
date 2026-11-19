@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
@@ -34,6 +35,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.socket.*;
+import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -79,6 +87,11 @@ class AnalyticsIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         registry.add("LOCAL_JWT_JWK_SET_URI", () -> "http://127.0.0.1:" + JWKS.getAddress().getPort() + "/jwks");
+        registry.add("analytics.dashboard.enabled", () -> "true");
+        registry.add("analytics.dashboard.url", () -> "wss://analytics.example.test/ws/analytics");
+        registry.add("analytics.dashboard.origin", () -> "https://frontend.example.test");
+        registry.add("analytics.dynamodb.enabled", () -> "true");
+        registry.add("analytics.dynamodb.table", () -> "test-history");
     }
 
     @TestConfiguration
@@ -98,12 +111,74 @@ class AnalyticsIntegrationTest {
     @Autowired RecommendationService recommendations;
     @Autowired KafkaListenerEndpointRegistry listeners;
     @Autowired MockMvc mvc;
+    @MockitoBean DynamoDbClient dynamo;
+    @LocalServerPort int httpPort;
 
     @BeforeEach void clean() {
-        jdbc.execute("TRUNCATE interaction,event_inbox,product_projection,event_quarantine");
+        jdbc.execute("TRUNCATE analytics_archive_pending,dashboard_ticket,interaction,event_inbox,product_projection,event_quarantine");
     }
 
     @AfterAll static void stopJwks() { JWKS.stop(0); }
+
+    @Test
+    void kafkaEventsDriveOwnerScopedMetricsOverNativeWebSocketAndTicketIsSingleUse() throws Exception {
+        product(91, "Pizza", "food", 8, true, 1);
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> assertThat(count("product_projection")).isEqualTo(1));
+        interaction(TENANT, A, 91, "VIEW", EventValidator.INTERACTION);
+        interaction(TENANT, B, 91, "VIEW", EventValidator.INTERACTION);
+        awaitCount(2);
+        mvc.perform(post("/api/analytics/me/dashboard-ticket")).andExpect(status().isUnauthorized());
+        String issued = mvc.perform(post("/api/analytics/me/dashboard-ticket")
+                        .header("Authorization", "Bearer " + token(TENANT, A, true)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String ticket = JSON.readTree(issued).get("ticket").asText();
+        var events = new java.util.concurrent.LinkedBlockingQueue<String>();
+        var headers = new WebSocketHttpHeaders();
+        headers.setOrigin("https://frontend.example.test");
+        var url = java.net.URI.create("ws://127.0.0.1:" + httpPort + "/ws/analytics");
+        var client = new StandardWebSocketClient();
+        try (var socket = client.execute(new TextWebSocketHandler() {
+            @Override protected void handleTextMessage(WebSocketSession connection, TextMessage message) {
+                events.offer(message.getPayload());
+            }
+        }, headers, url).get(10, TimeUnit.SECONDS)) {
+            socket.sendMessage(new TextMessage(ticket));
+            var first = JSON.readTree(events.poll(10, TimeUnit.SECONDS));
+            assertThat(first.path("interacciones").asLong()).isEqualTo(1);
+            assertThat(first.at("/productosMasVistos/0/visitas").asLong()).isEqualTo(1);
+            assertThat(first.at("/categorias/0/categoria").asText()).isEqualTo("food");
+            interaction(TENANT, A, 91, "ADD", EventValidator.CART);
+            var update = JSON.readTree(events.poll(10, TimeUnit.SECONDS));
+            assertThat(update.path("interacciones").asLong()).isEqualTo(2);
+            assertThat(update.at("/categorias/0/interacciones").asLong()).isEqualTo(2);
+        }
+        var closed = new java.util.concurrent.CompletableFuture<CloseStatus>();
+        try (var replay = client.execute(new TextWebSocketHandler() {
+            @Override public void afterConnectionClosed(WebSocketSession connection, CloseStatus reason) {
+                closed.complete(reason);
+            }
+        }, headers, url).get(10, TimeUnit.SECONDS)) {
+            replay.sendMessage(new TextMessage(ticket));
+            assertThat(closed.get(10, TimeUnit.SECONDS).getCode()).isEqualTo(1008);
+        }
+    }
+
+    @Test
+    void analyticsArchivesAValidatedKafkaEventWithTtlAndAcknowledgesADuplicateInDynamo() throws Exception {
+        org.mockito.Mockito.when(dynamo.putItem(org.mockito.ArgumentMatchers.any(PutItemRequest.class)))
+                .thenThrow(ConditionalCheckFailedException.builder().message("test duplicate").build());
+        String payload = interaction(TENANT, A, 41, "VIEW", EventValidator.INTERACTION);
+        String id = JSON.readTree(payload).get("eventId").asText();
+        awaitCount(1);
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            assertThat(count("analytics_archive_pending")).isZero();
+            org.mockito.Mockito.verify(dynamo).putItem(org.mockito.ArgumentMatchers.<PutItemRequest>argThat(request ->
+                    request.tableName().equals("test-history") && request.conditionExpression().equals("attribute_not_exists(pk)")
+                            && request.item().get("sk").s().equals(id)
+                            && request.item().get("pk").s().equals(TENANT + "#" + A)
+                            && Long.parseLong(request.item().get("expiresAt").n()) > Instant.now().getEpochSecond()));
+        });
+    }
 
     @Test
     @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named="EV3_PRODUCER_CONTRACTS", matches="true")

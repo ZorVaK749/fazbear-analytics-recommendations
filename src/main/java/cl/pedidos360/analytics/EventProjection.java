@@ -3,6 +3,7 @@ package cl.pedidos360.analytics;
 import java.sql.Timestamp;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,10 +11,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class EventProjection {
     private final JdbcTemplate jdbc;
     private final EventValidator validator;
+    private final boolean archiveEnabled;
 
-    public EventProjection(JdbcTemplate jdbc, EventValidator validator) {
+    public EventProjection(JdbcTemplate jdbc, EventValidator validator,
+                           @Value("${analytics.dynamodb.enabled:false}") boolean archiveEnabled) {
         this.jdbc = jdbc;
         this.validator = validator;
+        this.archiveEnabled = archiveEnabled;
     }
 
     @Transactional
@@ -37,6 +41,7 @@ public class EventProjection {
                 """, e.id(), UUID.fromString(d.path("tenantId").textValue()), UUID.fromString(d.path("ownerId").textValue()),
                     d.path("productoId").longValue(), d.path("tipo").textValue(),
                     d.has("cantidad") ? d.path("cantidad").intValue() : null, Timestamp.from(e.occurredAt()), topic);
+            if (archiveEnabled) jdbc.update("INSERT INTO analytics_archive_pending(event_id) VALUES (?)", e.id());
         }
     }
 }

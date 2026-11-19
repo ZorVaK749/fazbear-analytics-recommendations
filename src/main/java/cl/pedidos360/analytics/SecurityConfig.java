@@ -66,6 +66,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/api/recomendaciones/**", "/api/recomendaciones",
                                 "/api/analytics/**", "/api/analytics").permitAll()
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/ws/analytics").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/analytics/me/dashboard-ticket").hasAuthority("SCOPE_access_as_user")
                         .requestMatchers(HttpMethod.GET, "/api/recomendaciones/me", "/api/analytics/me/resumen")
                         .hasAuthority("SCOPE_access_as_user").anyRequest().denyAll())
                 .oauth2ResourceServer(o -> o.jwt(j -> {}).authenticationEntryPoint((req, res, ex) -> {
@@ -87,7 +89,7 @@ public class SecurityConfig {
         cors.setAllowedOrigins(List.of(
             "https://p5gsy16utd.execute-api.us-east-1.amazonaws.com",
             "http://localhost:4200"));
-        cors.setAllowedMethods(List.of("GET", "OPTIONS"));
+        cors.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"));
         cors.setAllowCredentials(false);
         cors.setMaxAge(3600L);

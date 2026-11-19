@@ -40,6 +40,15 @@ server:
     include-stacktrace: never
     include-binding-errors: never
 analytics:
+  dynamodb:
+    enabled: ${ANALYTICS_DYNAMODB_ENABLED:false}
+    table: ${ANALYTICS_DYNAMODB_TABLE:}
+    region: ${AWS_REGION:us-east-1}
+    retention-days: ${ANALYTICS_DYNAMODB_RETENTION_DAYS:30}
+  dashboard:
+    enabled: ${ANALYTICS_DASHBOARD_ENABLED:false}
+    url: ${ANALYTICS_DASHBOARD_WSS_URL:}
+    origin: ${ANALYTICS_DASHBOARD_ORIGIN:https://p5gsy16utd.execute-api.us-east-1.amazonaws.com}
   security:
     tenant: ${AZURE_TENANT_ID:ee0d2c5b-e60b-4c57-9b30-8a38a520c430}
     audience: ${AZURE_API_AUDIENCE:304fa289-2b72-447b-9c48-f00998f7c22f}

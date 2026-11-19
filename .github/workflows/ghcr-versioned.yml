@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - ev3/integracion-integral
+      - ev3/analytics-extras
   workflow_dispatch:
     inputs:
       publish:
@@ -14,7 +15,7 @@ permissions:
   packages: write
 jobs:
   image:
-    uses: ZorVaK749/fazbear-pago/.github/workflows/ghcr-build.yml@ev3/integracion-integral
+    uses: ZorVaK749/fazbear-pago/.github/workflows/ghcr-build.yml@ev3/webpay-integracion
     with:
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
 
